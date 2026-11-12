@@ -1,0 +1,48 @@
+# Sample configuration. Every name in angle brackets is a placeholder.
+#
+# Keep every top-level key above the first [table] or [[table]] header.
+# In TOML a key written after a table header belongs to that table, so a
+# variable placed below the bindings silently disappears.
+
+name = "<your-worker>"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+# Pick a custom domain or a route for the gateway, for example:
+# routes = [{ pattern = "<mail-gateway.your-domain>", custom_domain = true }]
+
+[observability]
+enabled = true
+
+[vars]
+# Sender domain (lower case) to the name of its send_email binding.
+SENDERS = '{"<mail.your-domain>":"MAIL_SENDER"}'
+# Domains that may send now. Remove one to stop it without touching bindings.
+ENABLED_DOMAINS = "<mail.your-domain>"
+# Optional limits, shown with their defaults.
+# MAX_SKEW_SECONDS = "300"
+# MAX_RECIPIENTS = "10"
+# MAX_BODY_BYTES = "4194304"
+# MAX_BATCH = "10"
+# BATCH_CONCURRENCY = "4"
+# STRIP_HEADER_PREFIXES = "X-SES-"
+
+# Secrets are never written here. Set them with:
+#   npx wrangler secret put GATEWAY_SECRET
+#   npx wrangler secret put GATEWAY_SECRET_NEXT   (only during a key change)
+
+# One binding per sender domain. allowed_sender_addresses lists the exact
+# From addresses. Cloudflare refuses any other address, so a leaked gateway
+# secret still cannot send as an address you did not list.
+[[send_email]]
+name = "MAIL_SENDER"
+allowed_sender_addresses = ["<sender@your-domain>", "<another-sender@your-domain>"]
+
+[[durable_objects.bindings]]
+name = "NONCE_STORE"
+class_name = "NonceStore"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["NonceStore"]

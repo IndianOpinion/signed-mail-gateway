@@ -1,0 +1,262 @@
+{
+  "description": "Test vectors for signed-mail-gateway request signing. Signature = lower-case hex HMAC-SHA256(secret as UTF-8 bytes, timestamp + '.' + nonce + '.' + body bytes). Bodies have no trailing newline. Each vector sets the gateway clock to clock_at (default: timestamp).",
+  "version": 1,
+  "secrets": {
+    "A": "gateway-test-secret-A-0123456789abcdef",
+    "B": "gateway-test-secret-B-fedcba9876543210"
+  },
+  "timestamp": "1767225600",
+  "nonce": "0123456789abcdef0123456789abcdef",
+  "gateway": {
+    "senders": {
+      "mail.example.org": "MAIL_SENDER"
+    },
+    "enabled_domains": [
+      "mail.example.org"
+    ],
+    "current_secret": "A"
+  },
+  "vectors": [
+    {
+      "id": "V1",
+      "description": "valid send",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "5b56c78ceb06a10c7b062c67a66e4a414e3d7c2eb2e15e93ee22cca8b54d353b",
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "id": "V2",
+      "description": "one byte changed, own signature",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader!\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "4bba3d9a61897a56b58d0e56d22b0e746e130bfa0e5e600b8b82e101f7be9e1b",
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "id": "V2-with-V1-signature",
+      "description": "V2 body with the V1 signature",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader!\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "5b56c78ceb06a10c7b062c67a66e4a414e3d7c2eb2e15e93ee22cca8b54d353b",
+      "expect": {
+        "status": 401,
+        "error": "auth_failed"
+      }
+    },
+    {
+      "id": "V3a",
+      "description": "raw UTF-8 body",
+      "path": "/v1/send",
+      "body": "{\"from\":\"news@mail.example.org\",\"to\":[\"reader@example.com\"],\"subject\":\"नमस्ते\",\"text\":\"Café\"}",
+      "body_bytes": 106,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "ee9c50409c61179c7427a0c95f97cde9b817d6715fcc49847014807f998ec64b",
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "id": "V3b",
+      "description": "the same message with \\u escapes",
+      "path": "/v1/send",
+      "body": "{\"from\":\"news@mail.example.org\",\"to\":[\"reader@example.com\"],\"subject\":\"\\u0928\\u092e\\u0938\\u094d\\u0924\\u0947\",\"text\":\"Caf\\u00e9\"}",
+      "body_bytes": 128,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "dea3f00920588d0001e296bda2664e78a74eb7d6083b2bf55cc6b47cc4657ef3",
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "id": "V3a-with-V3b-signature",
+      "description": "signatures swapped",
+      "path": "/v1/send",
+      "body": "{\"from\":\"news@mail.example.org\",\"to\":[\"reader@example.com\"],\"subject\":\"नमस्ते\",\"text\":\"Café\"}",
+      "body_bytes": 106,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "dea3f00920588d0001e296bda2664e78a74eb7d6083b2bf55cc6b47cc4657ef3",
+      "expect": {
+        "status": 401,
+        "error": "auth_failed"
+      }
+    },
+    {
+      "id": "V3b-with-V3a-signature",
+      "description": "signatures swapped",
+      "path": "/v1/send",
+      "body": "{\"from\":\"news@mail.example.org\",\"to\":[\"reader@example.com\"],\"subject\":\"\\u0928\\u092e\\u0938\\u094d\\u0924\\u0947\",\"text\":\"Caf\\u00e9\"}",
+      "body_bytes": 128,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "ee9c50409c61179c7427a0c95f97cde9b817d6715fcc49847014807f998ec64b",
+      "expect": {
+        "status": 401,
+        "error": "auth_failed"
+      }
+    },
+    {
+      "id": "V4",
+      "description": "check",
+      "path": "/v1/check",
+      "body": "{}",
+      "body_bytes": 2,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "67ea6f0dce81cb15a91232faae99547b2c1ba8697e113a94c110696f3ddac43f",
+      "expect": {
+        "status": 200,
+        "key_slot": "current"
+      }
+    },
+    {
+      "id": "V5",
+      "description": "upper case signature hex",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "5B56C78CEB06A10C7B062C67A66E4A414E3D7C2EB2E15E93EE22CCA8B54D353B",
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "id": "V6",
+      "description": "upper case nonce",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789ABCDEF0123456789ABCDEF",
+      "signature": "5b56c78ceb06a10c7b062c67a66e4a414e3d7c2eb2e15e93ee22cca8b54d353b",
+      "expect": {
+        "status": 401,
+        "error": "auth_failed"
+      }
+    },
+    {
+      "id": "V7",
+      "description": "next key: secret B as next, secret A current",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "B",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "344dd40efdaec51321e5d4086616a8fcd10aa003e964da41c681708e35dd782d",
+      "expect": {
+        "status": 200,
+        "key_slot": "next"
+      },
+      "next_secret": "B"
+    },
+    {
+      "id": "V7-without-next",
+      "description": "V7 with secret B unset",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "B",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "344dd40efdaec51321e5d4086616a8fcd10aa003e964da41c681708e35dd782d",
+      "expect": {
+        "status": 401,
+        "error": "auth_failed"
+      }
+    },
+    {
+      "id": "V8",
+      "description": "replay: V1 sent twice",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "5b56c78ceb06a10c7b062c67a66e4a414e3d7c2eb2e15e93ee22cca8b54d353b",
+      "expect": {
+        "status": 200,
+        "then": {
+          "status": 409,
+          "error": "replay"
+        }
+      }
+    },
+    {
+      "id": "V9-edge",
+      "description": "clock 300 s later",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "5b56c78ceb06a10c7b062c67a66e4a414e3d7c2eb2e15e93ee22cca8b54d353b",
+      "expect": {
+        "status": 200
+      },
+      "clock_at": 1767225900
+    },
+    {
+      "id": "V9-late",
+      "description": "clock 301 s later",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "5b56c78ceb06a10c7b062c67a66e4a414e3d7c2eb2e15e93ee22cca8b54d353b",
+      "expect": {
+        "status": 401,
+        "error": "stale_timestamp"
+      },
+      "clock_at": 1767225901
+    },
+    {
+      "id": "V9-early",
+      "description": "clock 301 s earlier",
+      "path": "/v1/send",
+      "body": "{\"from\":\"Example News <news@mail.example.org>\",\"to\":[\"reader@example.com\"],\"subject\":\"Hello\",\"text\":\"Hello, reader.\"}",
+      "body_bytes": 117,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "signature": "5b56c78ceb06a10c7b062c67a66e4a414e3d7c2eb2e15e93ee22cca8b54d353b",
+      "expect": {
+        "status": 401,
+        "error": "stale_timestamp"
+      },
+      "clock_at": 1767225299
+    }
+  ]
+}

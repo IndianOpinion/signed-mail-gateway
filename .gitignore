@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.wrangler/
+vendor/
+.phpunit.cache/
+.phpunit.result.cache
+composer.lock
+*.log
+.env
+.dev.vars
