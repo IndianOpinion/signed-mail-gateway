@@ -698,7 +698,7 @@ critical (check fails or not configured with provider `gateway`).
 - **Worker:** the Durable Object stores keys `<timestamp>.<nonce>` with the
   claim time as value. Retention: twice the skew window plus whatever is
   left when traffic stops (case 21). No message data is ever stored.
-- **Client:** four options (section 5.4). No tables, no transients except
+- **Client:** four options (section 5.6). No tables, no transients except
   the Site Health check cache (5 minutes). The last result is kept in
   memory for the request only.
 - **Uninstall:** `uninstall.php` deletes the four options and the Site
@@ -889,8 +889,14 @@ WordPress functions.
 | T58 Vectors V3a and V3b each verify as sent and fail when swapped | 99 |
 | T59 Body with a UTF-8 BOM and a valid signature gives `bad_json` | 100 |
 | T60 Headers as an array or empty object: nothing kept, nothing dropped | 101 |
-| T61 Log lines for a full run of T4 to T60 contain none of the test addresses, subjects, bodies, nonces or secrets | section 11 |
+| T61 Log lines for a full run of T4 to T68 contain none of the test addresses, subjects, bodies, nonces or secrets | section 11 |
 | T62 Every vector in 12.4 passes in a table-driven test | section 12.4 |
+| T63 With no further traffic, stored keys are unchanged (no timer deletes them); the next claim sweeps the old ones | 21 |
+| T64 The sample `wrangler.toml` declares allowed sender addresses on every binding (checked by a test that reads the file); the From is passed to the binding exactly as given and a refusal comes back as a provider error, never a rewrite | 26, 27 |
+| T65 Rotation sequence: current only, current plus next, next promoted to current; the client key verifies at every step and `/v1/check` reports the slot. Emergency rotation: the old key gives 401 at once | 46, 48 |
+| T66 Batch where one message fails still returns 200 with `sent` less than `n`; a binding that throws is called once, never retried | 53, 59 |
+| T67 A secret with non-ASCII characters verifies when both sides use its UTF-8 bytes | 97 |
+| T68 A single `to` string with a comma gives 400 `bad_recipient` | 98 |
 
 ### 12.2 WordPress client
 
@@ -931,7 +937,9 @@ WordPress functions.
 | C33 Env file under ABSPATH logs a warning; values still load | section 8 |
 | C34 Uninstall deletes the four options and the transient | section 6 |
 | C35 Signer reproduces every vector in 12.4 | section 12.4 |
-| C36 `wp signed-mail-gateway check` exits 0 on a good check and 1 on a 401 | section 5.6 |
+| C36 `wp signed-mail-gateway check` exits 0 on a good check and 1 on a 401 | 56, section 5.6 |
+| C37 Site Health test reports good, recommended (clock difference over half the skew) and critical (check fails) from a stubbed `/v1/check`, and caches the result for 5 minutes | 56, section 5.6 |
+| C38 On a multisite stub, options are read per site and constants apply to every site | 103 |
 
 ### 12.3 Integration (manual, documented in the README)
 
@@ -983,7 +991,7 @@ Signature: `ee9c50409c61179c7427a0c95f97cde9b817d6715fcc49847014807f998ec64b`.
 **V3b, the same message with `\u` escapes (secret A).** Body (128 bytes):
 
 ```
-{"from":"news@mail.example.org","to":["reader@example.com"],"subject":"नमस्ते","text":"Café"}
+{"from":"news@mail.example.org","to":["reader@example.com"],"subject":"\u0928\u092e\u0938\u094d\u0924\u0947","text":"Caf\u00e9"}
 ```
 
 Signature: `dea3f00920588d0001e296bda2664e78a74eb7d6083b2bf55cc6b47cc4657ef3`.
