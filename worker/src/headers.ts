@@ -126,9 +126,13 @@ export function filterHeaders(raw: unknown, stripPrefixes: readonly string[]): H
   if (postName !== undefined) {
     const unsubName = Object.keys(kept).find((n) => n.toLowerCase() === "list-unsubscribe");
     const unsub = unsubName === undefined ? undefined : kept[unsubName];
-    if (kept[postName] !== "List-Unsubscribe=One-Click" || unsub === undefined || !hasHttpsUnsubscribe(unsub)) {
-      delete kept[postName];
+    if (
+      kept[postName] !== "List-Unsubscribe=One-Click" ||
+      unsub === undefined ||
+      !hasHttpsUnsubscribe(unsub)
+    ) {
       dropped.push(postName);
+      return { kept: Object.fromEntries(Object.entries(kept).filter(([n]) => n !== postName)), dropped };
     }
   }
 

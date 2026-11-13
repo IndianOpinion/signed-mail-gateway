@@ -3,7 +3,7 @@ import { type Env, type GatewayConfig, readConfig } from "./config";
 import { type LogFields, log } from "./log";
 import { type OutboundMessage, validateMessage } from "./message";
 import { mapProviderError } from "./provider";
-import { MESSAGES, errorReply, jsonReply, textReply } from "./reply";
+import { MESSAGES, errorReply, jsonReply, messageFor, textReply } from "./reply";
 import { readSignedHeaders, signingBytes, verifySignature } from "./signature";
 import { VERSION } from "./version";
 
@@ -18,7 +18,7 @@ export const NONCE_STORE_NAME = "nonces";
 
 /** What a `send_email` binding must look like. */
 export interface MailBinding {
-  send(message: OutboundMessage): Promise<{ messageId?: string }>;
+  send(message: OutboundMessage): Promise<{ messageId?: unknown } | null | undefined>;
 }
 
 interface NonceStoreStub {
@@ -68,7 +68,12 @@ function parseJson(bytes: Uint8Array): { ok: true; value: unknown } | { ok: fals
 function refused(status: number, error: string, extra: Partial<SendOutcome> = {}): SendOutcome {
   return {
     status,
-    body: { ok: false, error, message: MESSAGES[error] ?? error, ...(extra.domain !== undefined ? { domain: extra.domain } : {}) },
+    body: {
+      ok: false,
+      error,
+      message: messageFor(error),
+      ...(extra.domain !== undefined ? { domain: extra.domain } : {}),
+    },
     outcome: "refused",
     code: error,
     rcpt: extra.rcpt ?? 0,
@@ -137,7 +142,11 @@ async function sendOne(input: unknown, rc: RequestContext): Promise<SendOutcome>
 }
 
 /** Runs `worker` over `items` with at most `limit` in flight; results keep input order. */
-export async function mapBounded<T, R>(items: readonly T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapBounded<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
   const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -171,11 +180,11 @@ async function handleBatch(bytes: Uint8Array, rc: RequestContext, fields: LogFie
       : undefined;
   if (!parsed.ok || !Array.isArray(messages) || messages.length === 0) {
     Object.assign(fields, { outcome: "refused", code: "bad_json" });
-    return errorReply(400, "bad_json", parsed.ok ? MESSAGES.bad_batch! : MESSAGES.bad_json!);
+    return errorReply(400, "bad_json", parsed.ok ? MESSAGES.bad_batch : MESSAGES.bad_json);
   }
   if (messages.length > rc.config.maxBatch) {
     Object.assign(fields, { outcome: "refused", code: "batch_too_large", n: messages.length });
-    return errorReply(400, "batch_too_large", MESSAGES.batch_too_large!);
+    return errorReply(400, "batch_too_large", MESSAGES.batch_too_large);
   }
 
   const outcomes = await mapBounded(messages, rc.config.batchConcurrency, (m) => sendOne(m, rc));
@@ -224,23 +233,23 @@ async function handleSigned(
 ): Promise<Response> {
   // 10. Configuration.
   const config = readConfig(env);
-  if (config.secrets.length === 0 || env.NONCE_STORE === undefined || env.NONCE_STORE === null) {
+  if (config.secrets.length === 0 || env.NONCE_STORE === undefined) {
     Object.assign(fields, { outcome: "misconfigured", code: "misconfigured" });
-    return errorReply(503, "misconfigured", MESSAGES.misconfigured!);
+    return errorReply(503, "misconfigured", MESSAGES.misconfigured);
   }
 
   // 11. Size, before anything is parsed.
   const body = await readBodyCapped(request, config.maxBodyBytes);
   if (!body.ok) {
     Object.assign(fields, { outcome: "refused", code: "body_too_large" });
-    return errorReply(413, "body_too_large", MESSAGES.body_too_large!);
+    return errorReply(413, "body_too_large", MESSAGES.body_too_large);
   }
 
   // 12. Header shape.
   const signed = readSignedHeaders(request.headers);
   if (signed === null) {
     Object.assign(fields, { outcome: "refused", code: "auth_failed" });
-    return errorReply(401, "auth_failed", MESSAGES.auth_malformed!);
+    return errorReply(401, "auth_failed", MESSAGES.auth_malformed);
   }
 
   // 13. Signature over the raw bytes, current secret first.
@@ -254,7 +263,7 @@ async function handleSigned(
   }
   if (slot === undefined) {
     Object.assign(fields, { outcome: "refused", code: "auth_failed" });
-    return errorReply(401, "auth_failed", MESSAGES.auth_signature!);
+    return errorReply(401, "auth_failed", MESSAGES.auth_signature);
   }
   fields.key_slot = slot;
 
@@ -262,7 +271,7 @@ async function handleSigned(
   const now = clock();
   if (Math.abs(now - Number(signed.timestamp)) > config.maxSkewSeconds) {
     Object.assign(fields, { outcome: "refused", code: "stale_timestamp" });
-    return errorReply(401, "stale_timestamp", MESSAGES.stale_timestamp!, { server_time: now });
+    return errorReply(401, "stale_timestamp", MESSAGES.stale_timestamp, { server_time: now });
   }
 
   // 15. Replay. The store being down fails closed.
@@ -273,11 +282,11 @@ async function handleSigned(
     fresh = await stub.claim(`${signed.timestamp}.${signed.nonce}`, now, config.maxSkewSeconds * 2);
   } catch {
     Object.assign(fields, { outcome: "refused", code: "nonce_store_unavailable" });
-    return errorReply(503, "nonce_store_unavailable", MESSAGES.nonce_store_unavailable!);
+    return errorReply(503, "nonce_store_unavailable", MESSAGES.nonce_store_unavailable);
   }
   if (!fresh) {
     Object.assign(fields, { outcome: "refused", code: "replay" });
-    return errorReply(409, "replay", MESSAGES.replay!);
+    return errorReply(409, "replay", MESSAGES.replay);
   }
 
   // 16. Only now is the body parsed.
@@ -325,7 +334,7 @@ export function createHandler(options: HandlerOptions = {}): ExportedHandler<Env
           code: "internal_error",
           error_name: err instanceof Error ? err.name : typeof err,
         });
-        response = errorReply(500, "internal_error", MESSAGES.internal_error!);
+        response = errorReply(500, "internal_error", MESSAGES.internal_error);
       }
       fields.ms = Date.now() - started;
       log(fields);

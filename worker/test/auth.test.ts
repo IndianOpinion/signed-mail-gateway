@@ -68,7 +68,9 @@ describe("header shape (cases 2, 12)", () => {
     const h = harness();
     const req = await signedRequest({ body: JSON.stringify(message()) });
     const headers = new Headers();
-    req.headers.forEach((value, name) => headers.set(name.toUpperCase(), value));
+    req.headers.forEach((value, name) => {
+      headers.set(name.toUpperCase(), value);
+    });
     const res = await h.fetch(new Request(req, { headers }));
     expect(res.status).toBe(200);
   });
@@ -220,7 +222,9 @@ describe("order of checks (cases 9 to 16)", () => {
     ["31 bytes", "x".repeat(31)],
   ])("T12: secret %s gives 503 misconfigured", async (_label, secret) => {
     const h = harness({ GATEWAY_SECRET: secret });
-    const res = await h.fetch(await signedRequest({ body: JSON.stringify(message()), secret: "x".repeat(31) }));
+    const res = await h.fetch(
+      await signedRequest({ body: JSON.stringify(message()), secret: "x".repeat(31) }),
+    );
     expect(res.status).toBe(503);
     expect((await json(res)).error).toBe("misconfigured");
     expect(logLines.some((l) => l.includes('"outcome":"misconfigured"'))).toBe(true);
@@ -245,7 +249,9 @@ describe("order of checks (cases 9 to 16)", () => {
     ["301 s ahead", T0 + 301],
   ])("T13: a timestamp %s gives 401 stale_timestamp with server_time", async (_label, ts) => {
     const h = harness();
-    const res = await h.fetch(await signedRequest({ body: JSON.stringify(message()), timestamp: String(ts) }));
+    const res = await h.fetch(
+      await signedRequest({ body: JSON.stringify(message()), timestamp: String(ts) }),
+    );
     expect(res.status).toBe(401);
     expect(await json(res)).toMatchObject({ error: "stale_timestamp", server_time: T0 });
   });

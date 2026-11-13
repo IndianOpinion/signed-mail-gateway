@@ -22,10 +22,11 @@ export async function readBodyCapped(request: Request, maxBytes: number): Promis
   const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
+    const step: ReadableStreamReadResult<unknown> = await reader.read();
+    if (step.done) {
       break;
     }
+    const value = step.value;
     const chunk = value instanceof Uint8Array ? value : new Uint8Array(value as ArrayBuffer);
     total += chunk.byteLength;
     if (total > maxBytes) {

@@ -7,7 +7,12 @@ export function jsonReply(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 }
 
-export function errorReply(status: number, error: string, message: string, extra: Record<string, unknown> = {}): Response {
+export function errorReply(
+  status: number,
+  error: string,
+  message: string,
+  extra: Record<string, unknown> = {},
+): Response {
   return jsonReply(status, { ok: false, error, message, ...extra });
 }
 
@@ -19,7 +24,7 @@ export function textReply(status: number, text: string, headers: Record<string, 
 }
 
 /** Short reply texts. Never built from request content. */
-export const MESSAGES: Readonly<Record<string, string>> = {
+export const MESSAGES = {
   misconfigured: "gateway is not configured",
   body_too_large: "body is over the size limit",
   auth_malformed: "malformed headers",
@@ -40,4 +45,9 @@ export const MESSAGES: Readonly<Record<string, string>> = {
   domain_unknown: "sender domain is not configured",
   domain_disabled: "sender domain is disabled",
   internal_error: "internal error",
-};
+} as const satisfies Record<string, string>;
+
+/** The reply text for a code, or the code itself when it has none. */
+export function messageFor(code: string): string {
+  return (MESSAGES as Record<string, string | undefined>)[code] ?? code;
+}

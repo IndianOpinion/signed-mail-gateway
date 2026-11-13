@@ -5,7 +5,7 @@ import type { NonceStore } from "../src/index";
 import { SWEEP_PER_CLAIM } from "../src/nonce-store";
 import { SECRET_B, T0, harness, json, message, randomNonce, send, signedRequest } from "./helpers";
 
-const namespace = env.NONCE_STORE as DurableObjectNamespace<NonceStore>;
+const namespace = env.NONCE_STORE as unknown as DurableObjectNamespace<NonceStore>;
 
 function store(): DurableObjectStub<NonceStore> {
   return namespace.get(namespace.idFromName(`direct-${crypto.randomUUID()}`));
@@ -13,7 +13,9 @@ function store(): DurableObjectStub<NonceStore> {
 
 async function rows(stub: DurableObjectStub<NonceStore>): Promise<{ k: string; claimed_at: number }[]> {
   return runInDurableObject(stub, (_instance, state) =>
-    state.storage.sql.exec<{ k: string; claimed_at: number }>("SELECT k, claimed_at FROM nonces ORDER BY k").toArray(),
+    state.storage.sql
+      .exec<{ k: string; claimed_at: number }>("SELECT k, claimed_at FROM nonces ORDER BY k")
+      .toArray(),
   );
 }
 
@@ -133,7 +135,9 @@ describe("nonce store (cases 17 to 22)", () => {
     await stub.claim(`${String(T0)}.${nonce}`, T0, 600);
     const dump = await runInDurableObject(stub, (_instance, state) => {
       const tables = state.storage.sql
-        .exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '_cf_%'")
+        .exec<{
+          name: string;
+        }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '_cf_%'")
         .toArray();
       return tables.map((t) => state.storage.sql.exec(`SELECT * FROM "${t.name}"`).toArray());
     });

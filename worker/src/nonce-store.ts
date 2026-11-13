@@ -37,7 +37,12 @@ export class NonceStore extends DurableObject {
    * @param windowSeconds How long keys are kept: twice the skew.
    */
   async claim(key: string, now: number, windowSeconds: number): Promise<boolean> {
-    if (!KEY_RE.test(key) || !Number.isInteger(now) || !Number.isInteger(windowSeconds) || windowSeconds < 1) {
+    if (
+      !KEY_RE.test(key) ||
+      !Number.isInteger(now) ||
+      !Number.isInteger(windowSeconds) ||
+      windowSeconds < 1
+    ) {
       throw new TypeError("invalid claim");
     }
     const cursor = this.sql.exec(

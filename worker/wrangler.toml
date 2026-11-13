@@ -4,7 +4,8 @@
 # In TOML a key written after a table header belongs to that table, so a
 # variable placed below the bindings silently disappears.
 
-name = "<your-worker>"
+# Rename to taste. Wrangler needs a valid name here even in a dry run.
+name = "signed-mail-gateway"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 workers_dev = false

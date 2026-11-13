@@ -67,10 +67,7 @@ export function signingBytes(timestamp: string, nonce: string, body: Uint8Array)
 }
 
 async function importKey(secret: Uint8Array): Promise<CryptoKey> {
-  return crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, [
-    "sign",
-    "verify",
-  ]);
+  return crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 }
 
 /** Constant-time check of one signature against one secret. */

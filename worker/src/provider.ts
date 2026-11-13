@@ -50,9 +50,7 @@ const ADDRESS_LIKE = /[^\s<>"'(),;:[\]]+@[^\s<>"'(),;:[\]]+/g;
 
 /** Replaces anything that looks like an address with `[address]` and cuts to 300 characters. */
 export function maskProviderMessage(message: string): string {
-  return Array.from(message.replace(ADDRESS_LIKE, "[address]"))
-    .slice(0, MAX_PROVIDER_MESSAGE)
-    .join("");
+  return Array.from(message.replace(ADDRESS_LIKE, "[address]")).slice(0, MAX_PROVIDER_MESSAGE).join("");
 }
 
 function isDailyLimit(code: string, message: string): boolean {
@@ -105,7 +103,8 @@ export function mapProviderError(err: unknown): ProviderFailure {
     return {
       status: 403,
       error: "sender_not_allowed",
-      providerCode: rawCode !== "" && /^[A-Za-z0-9_]{1,64}$/.test(rawCode) ? rawCode : SENDER_NOT_ALLOWED_CODE,
+      providerCode:
+        rawCode !== "" && /^[A-Za-z0-9_]{1,64}$/.test(rawCode) ? rawCode : SENDER_NOT_ALLOWED_CODE,
       message,
     };
   }

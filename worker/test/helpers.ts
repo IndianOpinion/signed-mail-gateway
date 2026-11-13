@@ -62,6 +62,7 @@ export class FakeBinding {
       const failure =
         this.failWhen !== undefined ? this.failWhen(message as Record<string, unknown>) : this.failWith;
       if (failure !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- tests throw non-Error values on purpose
         throw failure;
       }
       this.counter++;
@@ -130,7 +131,12 @@ export interface SignOptions {
   headers?: Record<string, string>;
 }
 
-export async function signFor(secret: string, timestamp: string, nonce: string, body: Uint8Array): Promise<string> {
+export async function signFor(
+  secret: string,
+  timestamp: string,
+  nonce: string,
+  body: Uint8Array,
+): Promise<string> {
   const prefix = encoder.encode(`${timestamp}.${nonce}.`);
   const data = new Uint8Array(prefix.byteLength + body.byteLength);
   data.set(prefix);
@@ -161,7 +167,9 @@ export async function signedRequest(options: SignOptions = {}): Promise<Request>
 
 /** Signs and sends a message object through /v1/send. */
 export async function send(h: Harness, message: unknown, options: SignOptions = {}): Promise<Response> {
-  return h.fetch(await signedRequest({ ...options, path: options.path ?? "/v1/send", body: JSON.stringify(message) }));
+  return h.fetch(
+    await signedRequest({ ...options, path: options.path ?? "/v1/send", body: JSON.stringify(message) }),
+  );
 }
 
 export function message(extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -175,7 +183,7 @@ export function message(extra: Record<string, unknown> = {}): Record<string, unk
 }
 
 export async function json(response: Response): Promise<Record<string, unknown>> {
-  return (await response.json());
+  return await response.json();
 }
 
 export function vectorRequest(v: Vector, overrides: Partial<SignOptions> = {}): Promise<Request> {

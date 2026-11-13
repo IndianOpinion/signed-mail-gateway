@@ -23,9 +23,9 @@ describe("sender domains (cases 23 to 27)", () => {
     const res = await send(h, message({ from: "news@two.example.org" }));
     expect(res.status).toBe(403);
     expect((await json(res)).error).toBe("domain_unknown");
-    expect(logLines.some((l) => l.includes('"outcome":"misconfigured_binding"') && l.includes("two.example.org"))).toBe(
-      true,
-    );
+    expect(
+      logLines.some((l) => l.includes('"outcome":"misconfigured_binding"') && l.includes("two.example.org")),
+    ).toBe(true);
   });
 
   it("T24: a mapped but not enabled domain gives 403 domain_disabled", async () => {
@@ -92,7 +92,11 @@ describe("sender domains (cases 23 to 27)", () => {
     const res = await send(h, message({ from: "other@mail.example.org" }));
     expect(res.status).toBe(403);
     const body = await json(res);
-    expect(body).toMatchObject({ ok: false, error: "sender_not_allowed", provider_code: "E_VALIDATION_ERROR" });
+    expect(body).toMatchObject({
+      ok: false,
+      error: "sender_not_allowed",
+      provider_code: "E_VALIDATION_ERROR",
+    });
     expect(String(body.message)).not.toContain("@");
   });
 });
@@ -102,10 +106,10 @@ describe("message validation (cases 28 to 38)", () => {
     ["missing to", { to: undefined }],
     ["empty to array", { to: [] }],
     ["one bad address in bcc", { bcc: ["ok@example.com", "not-an-address"] }],
-  ])("T26: %s gives 400 bad_recipient", async (_label, extra) => {
+  ] as [string, Record<string, unknown>][])("T26: %s gives 400 bad_recipient", async (_label, extra) => {
     const h = harness();
     const m = message(extra);
-    if (extra.to === undefined && "to" in extra) {
+    if ("to" in extra && extra.to === undefined) {
       delete m.to;
     }
     const res = await send(h, m);
@@ -116,9 +120,18 @@ describe("message validation (cases 28 to 38)", () => {
 
   it("T27: bare, Name <a@b>, quoted name and object forms all parse", () => {
     expect(parseAddress("a@example.org")).toEqual({ email: "a@example.org" });
-    expect(parseAddress("Ann Example <a@example.org>")).toEqual({ email: "a@example.org", name: "Ann Example" });
-    expect(parseAddress('"Example, Ann" <a@example.org>')).toEqual({ email: "a@example.org", name: "Example, Ann" });
-    expect(parseAddress({ email: "a@example.org", name: "Ann" })).toEqual({ email: "a@example.org", name: "Ann" });
+    expect(parseAddress("Ann Example <a@example.org>")).toEqual({
+      email: "a@example.org",
+      name: "Ann Example",
+    });
+    expect(parseAddress('"Example, Ann" <a@example.org>')).toEqual({
+      email: "a@example.org",
+      name: "Example, Ann",
+    });
+    expect(parseAddress({ email: "a@example.org", name: "Ann" })).toEqual({
+      email: "a@example.org",
+      name: "Ann",
+    });
     expect(parseAddress({ email: "a@example.org" })).toEqual({ email: "a@example.org" });
     expect(parseAddress("<a@example.org>")).toEqual({ email: "a@example.org" });
   });
@@ -127,7 +140,7 @@ describe("message validation (cases 28 to 38)", () => {
     expect(parseAddress("a@example.org\r")).toBeNull();
     expect(parseAddress("Name <a@example.org\nBcc: x@example.org>")).toBeNull();
     expect(parseAddress({ email: "a@exa\rmple.org" })).toBeNull();
-    const long = `${"a".repeat(64)}@${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.org`;
+    const long = `${"a".repeat(64)}@${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.${"e".repeat(10)}.org`;
     expect(long.length).toBeGreaterThan(254);
     expect(isValidEmail(long)).toBe(false);
     expect(isValidEmail("a@localhost")).toBe(false);
@@ -138,7 +151,10 @@ describe("message validation (cases 28 to 38)", () => {
   });
 
   it("T29/T102: display names: over 100 characters cut, tabs become spaces, spaces only means no name", () => {
-    expect(parseAddress(`${"n".repeat(150)} <a@example.org>`)).toEqual({ email: "a@example.org", name: "n".repeat(100) });
+    expect(parseAddress(`${"n".repeat(150)} <a@example.org>`)).toEqual({
+      email: "a@example.org",
+      name: "n".repeat(100),
+    });
     expect(parseAddress({ email: "a@example.org", name: "Ann\tExample" })).toEqual({
       email: "a@example.org",
       name: "Ann Example",
@@ -156,7 +172,10 @@ describe("message validation (cases 28 to 38)", () => {
     );
     expect(res.status).toBe(400);
     expect((await json(res)).error).toBe("too_many_recipients");
-    const ten = await send(h, message({ to: [0, 1, 2, 3].map(addr), cc: [4, 5, 6].map(addr), bcc: [7, 8, 9].map(addr) }));
+    const ten = await send(
+      h,
+      message({ to: [0, 1, 2, 3].map(addr), cc: [4, 5, 6].map(addr), bcc: [7, 8, 9].map(addr) }),
+    );
     expect(ten.status).toBe(200);
   });
 
@@ -227,7 +246,10 @@ describe("message validation (cases 28 to 38)", () => {
 
   it("T36: dropped headers are listed in the reply and never fail the message", async () => {
     const h = harness();
-    const res = await send(h, message({ headers: { "X-SES-Tags": "SECRET-HEADER-VALUE", "Bad Name!": "v" } }));
+    const res = await send(
+      h,
+      message({ headers: { "X-SES-Tags": "SECRET-HEADER-VALUE", "Bad Name!": "v" } }),
+    );
     expect(res.status).toBe(200);
     expect(await json(res)).toMatchObject({ dropped_headers: ["X-SES-Tags", "(invalid)"] });
     expect(h.binding.calls[0]).not.toHaveProperty("headers");
@@ -243,10 +265,27 @@ describe("message validation (cases 28 to 38)", () => {
   it("drops allowlisted headers past the provider's limit of 20", () => {
     const raw: Record<string, string> = {};
     const names = [
-      "In-Reply-To", "References", "Thread-Index", "Thread-Topic", "List-Unsubscribe", "List-Id",
-      "List-Archive", "List-Help", "List-Owner", "List-Post", "List-Subscribe", "Precedence",
-      "Auto-Submitted", "Content-Language", "Keywords", "Comments", "Importance", "Priority",
-      "Sensitivity", "Organization", "Expires",
+      "In-Reply-To",
+      "References",
+      "Thread-Index",
+      "Thread-Topic",
+      "List-Unsubscribe",
+      "List-Id",
+      "List-Archive",
+      "List-Help",
+      "List-Owner",
+      "List-Post",
+      "List-Subscribe",
+      "Precedence",
+      "Auto-Submitted",
+      "Content-Language",
+      "Keywords",
+      "Comments",
+      "Importance",
+      "Priority",
+      "Sensitivity",
+      "Organization",
+      "Expires",
     ];
     for (const name of names) {
       raw[name] = name === "List-Unsubscribe" ? "<https://example.org/u>" : "v";
@@ -259,7 +298,10 @@ describe("message validation (cases 28 to 38)", () => {
   it("T37: List-Unsubscribe-Post needs an https List-Unsubscribe", () => {
     const post = { "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" };
     expect(
-      filterHeaders({ "List-Unsubscribe": "<mailto:u@example.org>, <https://example.org/u?id=1>", ...post }, []).kept,
+      filterHeaders(
+        { "List-Unsubscribe": "<mailto:u@example.org>, <https://example.org/u?id=1>", ...post },
+        [],
+      ).kept,
     ).toHaveProperty("List-Unsubscribe-Post");
     const mailtoOnly = filterHeaders({ "List-Unsubscribe": "<mailto:u@example.org>", ...post }, []);
     expect(mailtoOnly.kept).not.toHaveProperty("List-Unsubscribe-Post");
@@ -267,7 +309,8 @@ describe("message validation (cases 28 to 38)", () => {
     expect(mailtoOnly.dropped).toEqual(["List-Unsubscribe-Post"]);
     expect(filterHeaders(post, []).dropped).toEqual(["List-Unsubscribe-Post"]);
     expect(
-      filterHeaders({ "List-Unsubscribe": "<https://example.org/u>", "List-Unsubscribe-Post": "yes" }, []).dropped,
+      filterHeaders({ "List-Unsubscribe": "<https://example.org/u>", "List-Unsubscribe-Post": "yes" }, [])
+        .dropped,
     ).toEqual(["List-Unsubscribe-Post"]);
   });
 
@@ -301,7 +344,12 @@ describe("message validation (cases 28 to 38)", () => {
     const h = harness();
     const res = await send(h, message({ headers: { "X-SES-Tags": "a" } }));
     expect(res.status).toBe(200);
-    expect(await json(res)).toEqual({ ok: true, id: "msg-1", domain: DOMAIN, dropped_headers: ["X-SES-Tags"] });
+    expect(await json(res)).toEqual({
+      ok: true,
+      id: "msg-1",
+      domain: DOMAIN,
+      dropped_headers: ["X-SES-Tags"],
+    });
   });
 
   it("T59: a body with a UTF-8 BOM and a valid signature gives bad_json", async () => {
@@ -321,13 +369,16 @@ describe("message validation (cases 28 to 38)", () => {
     expect((await json(res)).error).toBe("bad_json");
   });
 
-  it.each([[[]], [{}], [["X-A", "b"]], ["X-A: b"]])("T60: headers %j: nothing kept, nothing dropped", async (headers) => {
-    const h = harness();
-    const res = await send(h, message({ headers }));
-    expect(res.status).toBe(200);
-    expect((await json(res)).dropped_headers).toEqual([]);
-    expect(h.binding.calls[0]).not.toHaveProperty("headers");
-  });
+  it.each([[[]], [{}], [["X-A", "b"]], ["X-A: b"]])(
+    "T60: headers %j: nothing kept, nothing dropped",
+    async (headers) => {
+      const h = harness();
+      const res = await send(h, message({ headers }));
+      expect(res.status).toBe(200);
+      expect((await json(res)).dropped_headers).toEqual([]);
+      expect(h.binding.calls[0]).not.toHaveProperty("headers");
+    },
+  );
 
   it("T68: a single to string with a comma gives 400 bad_recipient", async () => {
     const h = harness();
@@ -349,7 +400,10 @@ describe("message validation (cases 28 to 38)", () => {
 describe("provider errors (cases 40 to 42)", () => {
   it("T40: an address in the binding's error message is masked", async () => {
     const h = harness();
-    h.binding.failWith = providerError("E_DELIVERY_FAILED", "Delivery to reader@example.com failed: mailbox full");
+    h.binding.failWith = providerError(
+      "E_DELIVERY_FAILED",
+      "Delivery to reader@example.com failed: mailbox full",
+    );
     const res = await send(h, message());
     expect(res.status).toBe(502);
     const body = await json(res);
@@ -426,7 +480,9 @@ describe("provider errors (cases 40 to 42)", () => {
   });
 
   it("a recipient error that mentions the sender is not taken for sender_not_allowed", () => {
-    expect(mapProviderError({ code: "E_RECIPIENT_NOT_ALLOWED", message: "sender not allowed to send here" })).toMatchObject({
+    expect(
+      mapProviderError({ code: "E_RECIPIENT_NOT_ALLOWED", message: "sender not allowed to send here" }),
+    ).toMatchObject({
       status: 403,
       error: "provider_error",
       providerCode: "E_RECIPIENT_NOT_ALLOWED",
