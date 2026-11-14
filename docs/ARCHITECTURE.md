@@ -3,7 +3,9 @@
 This document describes how signed-mail-gateway 0.1.0 is built and records
 every decision taken while building it from `docs/PRD.md`, including the
 answers to the PRD's open questions (section 13). Each decision has its
-reason.
+reason. Decisions 1 to 9 follow the owner's rulings on those questions;
+where a ruling differs from the PRD text, the ruling wins and the
+difference is named.
 
 ## Layout
 
@@ -50,13 +52,14 @@ Nothing is parsed or stored before step 5 passes.
 
 One Durable Object instance, addressed by a fixed name, holds a table
 `nonces (k TEXT PRIMARY KEY, claimed_at INTEGER) WITHOUT ROWID`. A claim is
-one `INSERT ... ON CONFLICT DO NOTHING`; `rowsWritten` says whether the key
-was new. Inside one Durable Object the statement runs on a single
+one `INSERT ... ON CONFLICT DO NOTHING`, run synchronously before the
+method's first `await`; `rowsWritten` says whether the key was new. A
+Durable Object runs one request's synchronous code at a time on a single
 strongly consistent writer, so concurrent claims of one key give exactly
-one `true` (test T18). After a successful claim the object deletes up to
-128 of the oldest keys below `now - 2 * skew`; keys start with the
-10-digit timestamp so they sort in time order. Only the key and the claim
-time are stored.
+one `true` (test T18 claims one key 20 times at once; T18/T96 sends one
+signed request twice at once through the handler). Old keys go in an alarm
+sweep (decision 3); keys start with the 10-digit timestamp so they sort in
+time order. Only the key and the claim time are stored.
 
 ## The WordPress client
 
@@ -103,53 +106,97 @@ Global functions: `signed_mail_gateway_send_batch()` and
 
 ### Answers to the PRD's open questions
 
-1. **Does the binding throw a distinct code when the From is not in
-   `allowed_sender_addresses`?** Cloudflare's published error list for the
-   Workers binding (checked 11 November 2026) has no code dedicated to
-   it. The Worker therefore recognises it in two ways: a code
-   `E_SENDER_NOT_ALLOWED` if one ever appears, or wording in the error
-   message that names `allowed_sender_addresses` or says the sender is not
-   allowed (and the code is not a recipient code). Such an error is
-   reported as 403 with `error: "sender_not_allowed"` and the provider's
-   code (or `E_SENDER_NOT_ALLOWED`) in `provider_code`. Anything else stays
-   a plain `provider_error`. The client classes `sender_not_allowed` as
+1. **Sender not allowed (ruling: `sender_not_allowed` when the binding's
+   error says so, otherwise `provider_error`).** Checked against
+   Cloudflare's public Email Sending documentation (Workers API, error
+   codes, read 13 November 2026): the 21 published codes include no code
+   for a From the account does not allow. So the Worker reads the wording:
+   an error whose message names `allowed_sender_addresses` or says the
+   sender is not allowed, not permitted or not authorised, and whose code
+   is empty, `E_VALIDATION_ERROR` or not on the published list, is
+   reported as 403 with `error: "sender_not_allowed"`; so is an unpublished
+   code of the binding's own that says it (`E_SENDER_NOT_ALLOWED` and the
+   like), should Cloudflare add one. `provider_code`
+   carries the binding's own code, or `E_SEND_FAILED` when it gave none.
+   The gateway never invents a Cloudflare-looking code. A documented,
+   specific code (for example `E_SENDER_NOT_VERIFIED`) keeps its own
+   meaning whatever its wording, and every other refusal is a plain
+   `provider_error`. The client classes `sender_not_allowed` as
    `unavailable`: the message was certainly not sent and the core path may
-   still deliver it. Reason: an operator must be able to tell "your
-   allowed address list is wrong" from a generic failure, without the
-   gateway guessing when the provider is vague. Tested in
-   `worker/test/message.test.ts`.
-2. **Can one binding serve several sender domains?** Yes. A `send_email`
-   binding is not tied to a domain; it can send from any onboarded domain
-   on the account, and `allowed_sender_addresses` may list addresses on
-   several domains. `SENDERS` may point several domains at one binding
-   name. The README recommends one binding per domain because each list
-   stays short and readable.
-3. **Alarm sweep or per-claim sweep only?** Both. The per-claim sweep (128
-   keys) keeps a busy store small; an alarm, set on the first claim and
-   re-armed while keys remain, empties the store when traffic stops. The
-   alarm deletes in batches of 1,000, up to 10 batches per run, then
-   re-arms one second later if more remain, so one run never holds the
-   object long. Reason: storage is billed per stored byte and an idle store
-   should not keep keys forever; the cost is one `getAlarm()` read per
-   claim. T63 checks that nothing but the alarm or a claim deletes keys.
-4. **Shard the nonce store?** No for 0.1.0. One Durable Object handles
-   on the order of a thousand simple SQLite writes a second; a site sends
-   dozens of messages a minute. It would matter above roughly 200 requests
-   a second sustained; then shard by the first nonce character (16
-   objects), which keeps one key on one object.
-5. **Error codes and the header allowlist.** Pinned to Cloudflare's Email
-   Service documentation as read on 11 November 2026 (Workers API error
-   handling, and the Email headers reference). The codes and their statuses
-   are in `worker/src/provider.ts`; the allowlist is in
-   `worker/src/headers.ts`, with its source in the file header.
-   `E_ACCOUNT_SUSPENDED` maps to 424 like the other sender-side codes.
-6. **Reading the body under a cap.** Stream with a byte counter. A
-   declared `Content-Length` over the cap is refused before reading. The
-   stream is read chunk by chunk and cancelled as soon as the running total
-   passes the cap, so a missing or false length never gets a larger body
-   through, and the Worker never buffers more than the cap plus one chunk.
-   The platform's own request limit is a backstop, not the control.
-7. **Delivery events (sketch, not built).** A later version consumes Email
+   still deliver it. Tested in `worker/test/message.test.ts`.
+2. **The binding is account-level (ruling).** A `send_email` binding is not
+   tied to a domain: it can send from any domain onboarded to Email Sending
+   on the account, so `SENDERS` may point several domains at one binding
+   name and the sample declares one unrestricted binding. Which From
+   addresses may send is set by the account holder in the Cloudflare
+   dashboard, not in `wrangler.toml`, so the list changes without a
+   redeploy and without anyone editing the Worker's config. This replaces
+   the PRD's case 26 and the first half of T64, which asked for
+   `allowed_sender_addresses` on every binding; T64 now checks that the
+   sample binding is named in `SENDERS` and carries no hard-coded sender or
+   destination list. Cloudflare's "Send bindings" page (read 13 November
+   2026) also documents an optional `allowed_sender_addresses` attribute on
+   the binding; the README and the sample mention it as an extra
+   restriction an operator may add, never as the primary control. The
+   Worker's domain map and enabled list stay a second line in either case.
+3. **Nonce sweep (ruling: Durable Object with an alarm sweep).** The alarm
+   is the sweep that keeps the store bounded: it is set on the first claim
+   (one `getAlarm()` read per claim), deletes keys older than twice the
+   skew by the object's own clock in batches of 1,000, up to 10 batches per
+   run, re-arms one second later while a full batch was deleted, re-arms
+   after one window while keys remain, and stops once the store is empty.
+   The PRD's per-claim sweep (case 19, up to 128 old keys after each new
+   claim) is kept beside it as a cheap extra for busy stores, and T19 still
+   checks it; it is not what bounds an idle store. PRD case 21 and T63 said
+   no timer deletes keys; under the ruling T63 checks instead that keys
+   stay until the alarm runs, that the alarm removes only old keys, and
+   that it re-arms or stops correctly.
+4. **Shard the nonce store? (ruling: no sharding in 0.1.0).** One Durable
+   Object is single-threaded; Cloudflare documents a soft limit of about
+   1,000 requests a second for one object, and each claim here costs one
+   insert, one small upsert and a bounded delete. A site sends dozens of
+   messages a minute. Sharding would start to matter above roughly 200
+   signed requests a second sustained, where claim latency begins to queue;
+   then shard by the first nonce character (16 objects), which keeps one
+   key on one object and so keeps replay detection exact.
+5. **Error codes and the header allowlist (ruling: pinned to a
+   documentation date).** Pinned to Cloudflare's Email Service
+   documentation as read on 11 November 2026 and checked again on
+   13 November 2026, with no change:
+   - error codes, 21 of them: `E_VALIDATION_ERROR`, `E_FIELD_MISSING`,
+     `E_TOO_MANY_RECIPIENTS`, `E_TOO_MANY_ATTACHMENTS`,
+     `E_SENDER_NOT_VERIFIED`, `E_RECIPIENT_NOT_ALLOWED`,
+     `E_RECIPIENT_SUPPRESSED`, `E_ACCOUNT_SUSPENDED`,
+     `E_SENDER_DOMAIN_NOT_AVAILABLE`, `E_CONTENT_TOO_LARGE`,
+     `E_DELIVERY_FAILED`, `E_RATE_LIMIT_EXCEEDED`,
+     `E_DAILY_LIMIT_EXCEEDED`, `E_INTERNAL_SERVER_ERROR` and the seven
+     header codes (`E_HEADER_NOT_ALLOWED`, `E_HEADER_USE_API_FIELD`,
+     `E_HEADER_VALUE_INVALID`, `E_HEADER_VALUE_TOO_LONG`,
+     `E_HEADER_NAME_INVALID`, `E_HEADERS_TOO_LARGE`,
+     `E_HEADERS_TOO_MANY`). Source:
+     `https://developers.cloudflare.com/email-service/api/send-emails/workers-api/`.
+   - custom header allowlist, 26 names, with the limits of 20 allowlisted
+     headers per message, 100-byte names, 2,048-byte values and 16 KB in
+     total. Source:
+     `https://developers.cloudflare.com/email-service/reference/headers/`.
+   The codes and their statuses are in `worker/src/provider.ts` and the
+   allowlist is in `worker/src/headers.ts`, each with the date and source
+   in its file header. `E_ACCOUNT_SUSPENDED` maps to 424 like the other
+   sender-side codes. `E_SEND_FAILED` and `E_UNKNOWN` are the gateway's own
+   codes for "no code" and "a code not safe to echo"; they are not
+   Cloudflare's. When Cloudflare changes either list, update both files and
+   this date together.
+6. **Reading the body under a cap (ruling: an ArrayBuffer under a
+   `Content-Length` check with a streaming cap).** A declared
+   `Content-Length` over the cap is refused with 413 before a byte is
+   read. The stream is then read chunk by chunk with a running byte count
+   and cancelled as soon as the total passes the cap, so a missing or
+   false length never gets a larger body through and the Worker never
+   buffers more than the cap plus one chunk. The chunks are copied into one
+   ArrayBuffer, and the HMAC is computed over exactly those bytes. The
+   platform's own request limit is a backstop, not the control. Tests T9,
+   T10 and T56.
+7. **Delivery events (ruling: sketch here only, not built).** A later version consumes Email
    Sending event subscriptions from a Queue in the same Worker and POSTs
    them to an origin URL the operator configures, for example
    `POST <origin>/wp-json/signed-mail-gateway/v1/events`, body
@@ -161,11 +208,25 @@ Global functions: `signed_mail_gateway_send_batch()` and
    provider message id is already returned, kept in the last result and
    passed to the attempt action, so a site can store it now and match
    events later.
-8. **Text conversion of HTML.** PHPMailer's own `html2text()` in its basic
-   mode. Reason: it ships with WordPress, so it adds no code, and it gives
-   the same text PHPMailer would derive itself. A plugin that sets
-   `AltBody` in `phpmailer_init` always wins.
-9. **Layout for two languages.** The Worker lives in `worker/`, not at the
+8. **Text conversion of HTML (ruling: a small built-in converter, no
+   dependency).** `client/src/HtmlToText.php`, about a hundred lines, used
+   only when no plugin set `AltBody` in `phpmailer_init` (a plugin's
+   `AltBody` always wins). It does not call PHPMailer's converter. Rules:
+   invalid UTF-8 is scrubbed; comments, CDATA and the elements `script`,
+   `style`, `head`, `title`, `template`, `noscript`, `svg`, `object` and
+   `iframe` are removed with their content by string search (an element
+   left open removes the rest, as a browser hides it, and no input size
+   can hit a regex backtracking limit); source whitespace collapses;
+   `http`, `https` and `mailto` links keep their target as `text (url)`;
+   other link schemes keep the text only; block elements and `br` become
+   line breaks and list items `- `; remaining tags go; entities are
+   decoded exactly once, after the tags are gone, so `&lt;script&gt;` is
+   text and never a tag. The output is a text part, never rendered as
+   HTML, so it is not a sanitiser. Tested in
+   `client/tests/HtmlToTextTest.php` against script, comment, entity and
+   size edge cases.
+9. **Layout for two languages (ruling: one repo, one CI with a Node job
+   and a PHP job).** The Worker lives in `worker/`, not at the
    root, and the client in `client/` with its own `composer.json` for dev
    tools. Reason: each half has its own lock file, config files and
    ignore rules, and neither toolchain should see the other's files (eslint
@@ -190,8 +251,8 @@ Global functions: `signed_mail_gateway_send_batch()` and
     sample uses `signed-mail-gateway` with a comment to rename it. Every
     other operator value (domains, addresses) stays an angle-bracket
     placeholder. The tests do not read `wrangler.toml` for bindings; one
-    test reads it to check every `send_email` binding lists
-    `allowed_sender_addresses` (T64).
+    test reads it to check the sample binding is named in `SENDERS` and
+    carries no hard-coded address list (T64, decision 2).
 13. **Bad versus out-of-range variables.** A variable that does not parse
     falls back to its default; a number outside its range is clamped to
     the nearest bound (case 54 says 99 is clamped). Both are logged once
@@ -254,6 +315,30 @@ Global functions: `signed_mail_gateway_send_batch()` and
     reduced `wp_mail()` with core's filter order and events, `WP_Error`,
     and `WP_CLI`). PHPStan uses the `php-stubs` packages for real
     WordPress and WP-CLI signatures.
+
+### Security review notes (0.1.0)
+
+27. **One signing string, two halves.** Both halves sign
+    `<timestamp>.<nonce>.<body>` over bytes: the Worker builds the prefix
+    with `TextEncoder` and appends the raw body bytes; the client
+    concatenates PHP byte strings and calls `hash_hmac`. Vector V10 in
+    `test-vectors/v1.json` is the cross-half check: its body is exactly
+    what the client's encoder produces for its `message` (non-ASCII escaped
+    as `\u`, slashes not escaped, a 64-character nonce). The PHP suite
+    asserts the encoder reproduces the body byte for byte and signs it to
+    the vector signature; the Worker suite verifies the same bytes and
+    checks the binding receives the intended message.
+28. **The secret is used byte for byte on both sides.** Neither half trims
+    it. The client used to trim the constant while the Worker did not, so
+    a secret with surrounding whitespace would have failed every request.
+29. **Control characters.** Header values with any control character other
+    than tab are dropped; display names turn every control character into
+    a space; subjects fold CR and LF runs and turn other control
+    characters (except tab) into spaces. Addresses are ASCII dot-atom only.
+30. **Secrets out of output.** The client marks every secret parameter
+    `#[\SensitiveParameter]` (effective in traces from PHP 8.2), redacts
+    the secret from `var_dump()` and `print_r()` of `Config`, and the
+    status command redacts any user part of the URL.
 
 ## Test map
 

@@ -39,7 +39,7 @@ You need a Cloudflare account with Email Sending enabled, at least one sending d
 git clone https://github.com/IndianOpinion/signed-mail-gateway.git
 cd signed-mail-gateway/worker
 npm ci
-# Edit wrangler.toml: name, route, SENDERS, ENABLED_DOMAINS, the send_email binding and its allowed addresses.
+# Edit wrangler.toml: name, route, SENDERS, ENABLED_DOMAINS and the send_email binding name.
 npx wrangler secret put GATEWAY_SECRET
 npx wrangler deploy
 ```
@@ -72,7 +72,7 @@ With `composer/installers` the package lands in your plugins directory because i
 
 ## Quick start: a worked example
 
-One sending subdomain, `mail.example.org`, with two allowed From addresses.
+One sending subdomain, `mail.example.org`, with two allowed From addresses set in the Cloudflare dashboard.
 
 1. **`worker/wrangler.toml`.** Keep every top-level key above the first table: in TOML a key written after a `[table]` header belongs to that table, so a variable placed below the bindings silently disappears.
 
@@ -92,7 +92,6 @@ One sending subdomain, `mail.example.org`, with two allowed From addresses.
 
    [[send_email]]
    name = "MAIL_SENDER"
-   allowed_sender_addresses = ["news@mail.example.org", "accounts@mail.example.org"]
 
    [[durable_objects.bindings]]
    name = "NONCE_STORE"
@@ -103,7 +102,9 @@ One sending subdomain, `mail.example.org`, with two allowed From addresses.
    new_sqlite_classes = ["NonceStore"]
    ```
 
-   **List the exact From addresses in `allowed_sender_addresses` on every binding.** Cloudflare then refuses any other address, so even a leaked gateway secret cannot send as an address you did not list. The Worker's own domain check is a second line, not the only one.
+   **The binding is account-level.** A `send_email` binding is not tied to one domain: it can send from any domain onboarded to Email Sending on the account. **Set the allowed From addresses (here `news@mail.example.org` and `accounts@mail.example.org`) in the Cloudflare dashboard** for the account, not in `wrangler.toml`. Cloudflare then refuses any other address, so even a leaked gateway secret cannot send as an address you did not allow, and changing the list needs no redeploy. The Worker's own domain map and enabled list are a second line, not the only one. Cloudflare also documents an optional per-binding `allowed_sender_addresses = [...]` line in `wrangler.toml` (Email Service, "Send bindings", read 13 November 2026); add it if you want a further restriction, but keep the dashboard setting as the control.
+
+   A refusal for a From the account does not allow comes back as 403 `sender_not_allowed` when Cloudflare's error says so (Cloudflare publishes no dedicated code for it), and as a plain `provider_error` otherwise.
 
 2. **Secret.** Generate 32 random bytes as hex, set it on the Worker, deploy:
 
@@ -247,7 +248,7 @@ Removing the Worker: `npx wrangler delete` in `worker/` removes the Worker toget
 - No retries inside the Worker: after an ambiguous failure a retry could send twice. The caller decides.
 - One deployment serves one operator and one secret (two during rotation).
 - The secret on the origin is as sensitive as SMTP credentials. Keep it out of the web root and readable only by the PHP user. A compromised origin can send whatever the gateway allows, within its limits.
-- One nonce Durable Object handles hundreds of claims a second, far above a site's mail. It does not shard.
+- One nonce Durable Object handles hundreds of claims a second, far above a site's mail. It does not shard in 0.1.0; sharding would matter above roughly 200 signed requests a second sustained (see `docs/ARCHITECTURE.md`, decision 4). An alarm sweeps old keys when traffic stops.
 
 ## FAQ
 
@@ -257,7 +258,7 @@ Removing the Worker: `npx wrangler delete` in `worker/` removes the Worker toget
 
 **Why did a message fail without falling back to SMTP?** Its class was `rejected`, `suppressed` or `unknown`. Sending a wrong message, or a message to a suppressed recipient, by another road hurts the domain; after `unknown` the message may already have been delivered.
 
-**Can several sender domains share one binding?** Yes: a binding is not tied to a domain, so `SENDERS` may point several domains at one binding name, as long as its `allowed_sender_addresses` lists the addresses for each. One binding per domain keeps each list short and is easier to read.
+**Can several sender domains share one binding?** Yes: the binding is account-level and not tied to a domain, so `SENDERS` may point several domains at one binding name. The allowed From addresses for every domain are set in the Cloudflare dashboard.
 
 **Can I call the gateway from something that is not WordPress?** Yes. Sign `<timestamp>.<nonce>.<body>` with HMAC-SHA256, send the three headers, and check your code against `test-vectors/v1.json`. See `examples/`.
 

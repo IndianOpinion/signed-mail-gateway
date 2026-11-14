@@ -14,10 +14,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - HMAC-SHA256 signatures over timestamp, nonce and raw body, verified in
   constant time, with a current and a next secret for key rotation.
 - Clock skew check (300 seconds by default) that reports the server time.
-- Replay guard in a SQLite-backed Durable Object, with a per-claim and an
-  alarm sweep.
-- Sender domain map, enabled-domain switch, and documented
-  `allowed_sender_addresses` on every binding.
+- Replay guard in a SQLite-backed Durable Object with an alarm sweep (and
+  a small per-claim sweep).
+- Sender domain map and enabled-domain switch over one account-level
+  `send_email` binding; allowed From addresses are set in the Cloudflare
+  dashboard. `sender_not_allowed` when the provider's error says so.
 - Message validation, header allowlist pinned to Cloudflare's
   documentation, one-click unsubscribe check, provider error mapping with
   quota normalisation and address masking.
@@ -28,7 +29,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   core path, core mail events, sender profiles, batch API, WP-CLI commands
   (`status`, `check`, `send-test`), a Site Health test and uninstall
   cleanup.
-- Shared test vectors in `test-vectors/v1.json`, used by both test suites.
+- A small built-in HTML to text converter for the text part, with no
+  dependency.
+- Shared test vectors in `test-vectors/v1.json`, used by both test suites,
+  including a cross-half vector produced by the client's own encoder.
 
 [Unreleased]: https://github.com/IndianOpinion/signed-mail-gateway/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/IndianOpinion/signed-mail-gateway/releases/tag/v0.1.0
