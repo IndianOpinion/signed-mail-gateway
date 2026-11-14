@@ -164,7 +164,9 @@ final class MessageBuilder
 
         if ($mailer->ContentType === 'text/html') {
             $payload['html'] = $convert($mailer->Body);
-            $payload['text'] = $convert($mailer->AltBody !== '' ? $mailer->AltBody : $mailer->html2text($mailer->Body));
+            $payload['text'] = $mailer->AltBody !== ''
+                ? $convert($mailer->AltBody)
+                : HtmlToText::convert($convert($mailer->Body));
         } else {
             $payload['text'] = $convert($mailer->Body);
         }

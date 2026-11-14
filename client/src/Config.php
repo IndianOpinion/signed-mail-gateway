@@ -37,7 +37,7 @@ final class Config
      */
     public function __construct(
         public readonly string $url,
-        public readonly string $secret,
+        #[\SensitiveParameter] public readonly string $secret,
         public readonly string $provider = self::PROVIDER_GATEWAY,
         public readonly bool $fallback = true,
         public readonly array $domains = [],
@@ -45,6 +45,19 @@ final class Config
         public readonly ?string $problem = null,
         public readonly array $warnings = [],
     ) {
+    }
+
+    /**
+     * What `var_dump()` and `print_r()` show: everything but the secret.
+     *
+     * @return array<string, mixed>
+     */
+    public function __debugInfo(): array
+    {
+        $info = get_object_vars($this);
+        $info['secret'] = $this->secret === '' ? '' : '[redacted]';
+
+        return $info;
     }
 
     public function isConfigured(): bool
@@ -67,7 +80,8 @@ final class Config
     {
         $warnings = [];
         $url = self::constant('SIGNED_MAIL_GATEWAY_URL');
-        $secret = self::constant('SIGNED_MAIL_GATEWAY_SECRET');
+        // The secret is used byte for byte, as the Worker uses it: no trimming.
+        $secret = self::constant('SIGNED_MAIL_GATEWAY_SECRET', false);
 
         $file = self::constant('SIGNED_MAIL_GATEWAY_ENV_FILE');
         if ($file !== '' && ($url === '' || $secret === '')) {
@@ -160,14 +174,17 @@ final class Config
         return $out;
     }
 
-    private static function constant(string $name): string
+    private static function constant(string $name, bool $trim = true): string
     {
         if (!defined($name)) {
             return '';
         }
         $value = constant($name);
+        if (!is_string($value)) {
+            return '';
+        }
 
-        return is_string($value) ? trim($value) : '';
+        return $trim ? trim($value) : $value;
     }
 
     /**

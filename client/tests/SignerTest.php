@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace IndianOpinion\SignedMailGateway\Tests;
 
+use IndianOpinion\SignedMailGateway\GatewayClient;
 use IndianOpinion\SignedMailGateway\Signer;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -49,6 +50,33 @@ final class SignerTest extends TestCase
         } else {
             self::assertSame($expected, strtolower($v['signature']));
         }
+    }
+
+    /**
+     * V10, cross-half: the client's own encoder produces the vector body byte
+     * for byte, and that body signs to the vector signature the Worker
+     * verifies in worker/test/vectors.test.ts.
+     */
+    public function testV10ClientEncoderProducesTheSharedBodyByteForByte(): void
+    {
+        $data = self::vectors();
+        $v = null;
+        foreach ($data['vectors'] as $candidate) {
+            if ($candidate['id'] === 'V10') {
+                $v = $candidate;
+            }
+        }
+        self::assertIsArray($v);
+        self::assertIsArray($v['message']);
+        $body = GatewayClient::encode($v['message']);
+        self::assertSame($v['body'], $body);
+        self::assertSame($v['body_bytes'], strlen($body));
+        self::assertSame(
+            $v['signature'],
+            Signer::sign($data['secrets']['A'], $v['timestamp'], $v['nonce'], $body)
+        );
+        $headers = Signer::headers($data['secrets']['A'], $body, (int) $v['timestamp'], $v['nonce']);
+        self::assertSame($v['signature'], $headers[Signer::HEADER_SIGNATURE]);
     }
 
     public function testV1ExactlyAsInThePrd(): void

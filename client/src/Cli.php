@@ -43,7 +43,7 @@ final class Cli
         \WP_CLI::line('provider:      ' . $config->provider);
         \WP_CLI::line('fallback:      ' . ($config->fallback ? 'on' : 'off'));
         \WP_CLI::line('configured:    ' . ($config->isConfigured() ? 'yes' : 'no (' . (string) $config->problem . ')'));
-        \WP_CLI::line('url:           ' . ($config->url !== '' ? $config->url : '(none)'));
+        \WP_CLI::line('url:           ' . ($config->url !== '' ? self::redactUrl($config->url) : '(none)'));
         \WP_CLI::line('domains:       ' . ($config->domains !== [] ? implode(', ', $config->domains) : '(none)'));
         \WP_CLI::line('default from:  ' . ($config->defaultFrom !== '' ? $config->defaultFrom : '(none)'));
         foreach ($config->warnings as $warning) {
@@ -125,5 +125,11 @@ final class Cli
             return;
         }
         \WP_CLI::error($line);
+    }
+
+    /** The URL without any user or password part, which is never printed. */
+    private static function redactUrl(string $url): string
+    {
+        return preg_replace('#^([a-z][a-z0-9+.-]*://)[^/@]*@#i', '$1[redacted]@', $url) ?? '';
     }
 }

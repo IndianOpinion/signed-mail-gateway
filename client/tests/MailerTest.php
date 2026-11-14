@@ -120,14 +120,15 @@ final class MailerTest extends TestCase
     {
         $this->configure();
         $this->sentOk();
-        wp_mail('reader@example.com', 'Hi', '<html><body><p>Your code is <b>123456</b></p></body></html>', [
-            'Content-Type: text/html',
-            'From: ann@mail.example.org',
-        ]);
+        wp_mail(
+            'reader@example.com',
+            'Hi',
+            '<html><head><style>p{}</style></head><body><p>Your code is <b>123456</b></p>'
+            . '<script>track()</script><p><a href="https://example.org/in">Sign in</a></p></body></html>',
+            ['Content-Type: text/html', 'From: ann@mail.example.org']
+        );
         $p = $this->payload();
-        self::assertIsString($p['text']);
-        self::assertStringContainsString('Your code is 123456', $p['text']);
-        self::assertStringNotContainsString('<', $p['text']);
+        self::assertSame("Your code is 123456\n\nSign in (https://example.org/in)", $p['text']);
     }
 
     public function testPlainTextMessageHasNoHtml(): void

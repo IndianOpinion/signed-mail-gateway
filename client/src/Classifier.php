@@ -50,7 +50,6 @@ final class Classifier
         'E_RATE_LIMIT_EXCEEDED' => Outcome::RETRY,
         'E_SENDER_NOT_VERIFIED' => Outcome::UNAVAILABLE,
         'E_SENDER_DOMAIN_NOT_AVAILABLE' => Outcome::UNAVAILABLE,
-        'E_SENDER_NOT_ALLOWED' => Outcome::UNAVAILABLE,
         'E_RECIPIENT_NOT_ALLOWED' => Outcome::UNAVAILABLE,
         'E_ACCOUNT_SUSPENDED' => Outcome::UNAVAILABLE,
         'E_INTERNAL_SERVER_ERROR' => Outcome::UNAVAILABLE,
