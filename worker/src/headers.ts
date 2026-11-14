@@ -51,6 +51,8 @@ export const MAX_HEADERS_TOTAL_BYTES = 16 * 1024;
 export const INVALID_NAME = "(invalid)";
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,100}$/;
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
+const CONTROL_RE = /[\x00-\x08\x0a-\x1f\x7f]/;
 const allowed = new Map(ALLOWED_HEADERS.map((name) => [name.toLowerCase(), name]));
 const encoder = new TextEncoder();
 
@@ -86,7 +88,9 @@ export function filterHeaders(raw: unknown, stripPrefixes: readonly string[]): H
     const lower = name.toLowerCase();
     const isX = lower.startsWith("x-");
     const isAllowed = allowed.has(lower);
-    if (typeof value !== "string" || /[\r\n]/.test(value)) {
+    // CR and LF would start a new header; other control characters (NUL
+    // among them) have no place in a header value either. Tab is allowed.
+    if (typeof value !== "string" || CONTROL_RE.test(value)) {
       dropped.push(name);
       continue;
     }

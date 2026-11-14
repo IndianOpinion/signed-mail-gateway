@@ -257,6 +257,37 @@
         "error": "stale_timestamp"
       },
       "clock_at": 1767225299
+    },
+    {
+      "id": "V10",
+      "description": "cross-half: body is exactly what the PHP client's encoder produces for 'message' (non-ASCII escaped as \\u, slashes unescaped), 64-character nonce",
+      "path": "/v1/send",
+      "message": {
+        "from": {
+          "email": "accounts@mail.example.org",
+          "name": "Example Accounts"
+        },
+        "to": [
+          "Reader One <reader@example.com>"
+        ],
+        "reply_to": "help@mail.example.org",
+        "subject": "Your code: 123456 (नमस्ते, Café & co)",
+        "html": "<p>Sign in at <a href=\"https://example.org/sign-in/?t=a/b\">this link</a>.</p>",
+        "text": "Sign in at this link (https://example.org/sign-in/?t=a/b).",
+        "headers": {
+          "List-Unsubscribe": "<https://example.org/u/1>",
+          "X-Entity-Ref-ID": "ref/1"
+        }
+      },
+      "body": "{\"from\":{\"email\":\"accounts@mail.example.org\",\"name\":\"Example Accounts\"},\"to\":[\"Reader One <reader@example.com>\"],\"reply_to\":\"help@mail.example.org\",\"subject\":\"Your code: 123456 (\\u0928\\u092e\\u0938\\u094d\\u0924\\u0947, Caf\\u00e9 & co)\",\"html\":\"<p>Sign in at <a href=\\\"https://example.org/sign-in/?t=a/b\\\">this link</a>.</p>\",\"text\":\"Sign in at this link (https://example.org/sign-in/?t=a/b).\",\"headers\":{\"List-Unsubscribe\":\"<https://example.org/u/1>\",\"X-Entity-Ref-ID\":\"ref/1\"}}",
+      "body_bytes": 475,
+      "signed_with": "A",
+      "timestamp": "1767225600",
+      "nonce": "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+      "signature": "47adc53ab73ade07db8b32939bec71648464755cc22b5a4f9c4b8065f6522777",
+      "expect": {
+        "status": 200
+      }
     }
   ]
 }

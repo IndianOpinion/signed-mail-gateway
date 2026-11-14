@@ -54,13 +54,23 @@ describe("sender domains (cases 23 to 27)", () => {
     expect((await send(h, message())).status).toBe(200);
   });
 
-  it("T64: the sample wrangler.toml lists allowed sender addresses on every binding", () => {
+  it("T64: the sample wrangler.toml declares an account-level binding named in SENDERS", () => {
     const blocks = wranglerToml.split(/^\[\[send_email\]\]\s*$/m).slice(1);
     expect(blocks.length).toBeGreaterThan(0);
+    const senders = /^SENDERS = '(.*)'$/m.exec(wranglerToml)?.[1] ?? "{}";
+    const named = new Set(Object.values(JSON.parse(senders) as Record<string, string>));
     for (const block of blocks) {
       const body = block.split(/^\[/m)[0] ?? "";
-      expect(body).toMatch(/^allowed_sender_addresses\s*=\s*\[[^\]]*"[^"]+"/m);
+      const name = /^name = "([A-Z0-9_]+)"$/m.exec(body)?.[1];
+      expect(name).toBeDefined();
+      expect(named.has(name ?? "")).toBe(true);
+      // Allowed senders are set in the dashboard; no binding is tied to a
+      // destination list, and no address is hard-coded as live config.
+      expect(body).not.toMatch(/^allowed_destination_addresses/m);
+      expect(body).not.toMatch(/^destination_address/m);
+      expect(body).not.toMatch(/^allowed_sender_addresses/m);
     }
+    expect(wranglerToml).toMatch(/dashboard/);
   });
 
   it("T64: top-level keys in wrangler.toml come before the first table", () => {
@@ -222,6 +232,31 @@ describe("message validation (cases 28 to 38)", () => {
     expect((await json(await send(h, message({ attachments: "x" })))).error).toBe("attachments_unsupported");
     expect((await send(h, message({ attachments: [] }))).status).toBe(200);
     expect((await send(h, message({ attachments: null }))).status).toBe(200);
+  });
+
+  it("header injection: control characters in header values, names and subjects", async () => {
+    const f = filterHeaders(
+      {
+        "X-Nul": "a\u0000b",
+        "X-Cr": "a\rBcc: victim@example.com",
+        "X-Vt": "a\u000bb",
+        "X-Del": "a\u007fb",
+        "X-Tab": "a\tb",
+        "Bcc: x@example.com\r\nX-A": "v",
+      },
+      [],
+    );
+    expect(f.kept).toEqual({ "X-Tab": "a\tb" });
+    expect(f.dropped).toEqual(["X-Nul", "X-Cr", "X-Vt", "X-Del", "(invalid)"]);
+
+    expect(parseAddress({ email: FROM, name: "A\u0000B\u001bC" })).toEqual({ email: FROM, name: "A B C" });
+    expect(parseAddress("Name <a@b.example>\r\nBcc: c@d.example")).toBeNull();
+    expect(parseAddress({ email: "a@b.example\nBcc: c@d.example" })).toBeNull();
+
+    const h = harness();
+    const res = await send(h, message({ subject: "Hi\u0000there\r\nBcc: victim@example.com" }));
+    expect(res.status).toBe(200);
+    expect((h.binding.calls[0] as { subject: string }).subject).toBe("Hi there Bcc: victim@example.com");
   });
 
   it("T36: header filter", () => {
@@ -477,6 +512,42 @@ describe("provider errors (cases 40 to 42)", () => {
 
   it("a code with odd characters is not echoed", () => {
     expect(mapProviderError({ code: "E_<script>", message: "x" }).providerCode).toBe("E_UNKNOWN");
+  });
+
+  it("sender_not_allowed: only from wording, never an invented code", () => {
+    // Generic validation code with sender wording.
+    expect(
+      mapProviderError({ code: "E_VALIDATION_ERROR", message: "Sender address is not allowed" }),
+    ).toMatchObject({ status: 403, error: "sender_not_allowed", providerCode: "E_VALIDATION_ERROR" });
+    // No code at all: the gateway's own no-code value, not a made-up Cloudflare code.
+    expect(mapProviderError(new Error("sender not permitted for this account"))).toMatchObject({
+      status: 403,
+      error: "sender_not_allowed",
+      providerCode: "E_SEND_FAILED",
+    });
+    // A documented, specific code keeps its own meaning whatever the wording.
+    for (const code of ["E_SENDER_NOT_VERIFIED", "E_SENDER_DOMAIN_NOT_AVAILABLE", "E_DELIVERY_FAILED"]) {
+      expect(mapProviderError({ code, message: "sender not allowed" })).toMatchObject({
+        error: "provider_error",
+        providerCode: code,
+      });
+    }
+    // Any other wording stays a provider error.
+    expect(mapProviderError({ code: "E_VALIDATION_ERROR", message: "invalid subject" })).toMatchObject({
+      status: 400,
+      error: "provider_error",
+    });
+    // An unpublished code that itself says so is the binding's own word, passed through.
+    expect(mapProviderError({ code: "E_SENDER_NOT_ALLOWED", message: "x" })).toMatchObject({
+      status: 403,
+      error: "sender_not_allowed",
+      providerCode: "E_SENDER_NOT_ALLOWED",
+    });
+    // Any other unpublished code is a plain provider error.
+    expect(mapProviderError({ code: "E_SOMETHING_NEW", message: "x" })).toMatchObject({
+      status: 502,
+      error: "provider_error",
+    });
   });
 
   it("a recipient error that mentions the sender is not taken for sender_not_allowed", () => {

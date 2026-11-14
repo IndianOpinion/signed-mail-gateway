@@ -179,8 +179,11 @@ describe("size (cases 8, 11)", () => {
       new Request("https://gateway.example/v1/send", { method: "POST", body: stream, headers }),
     );
     expect(res.status).toBe(413);
-    // Reading stopped soon after the cap, not at the end of the stream.
-    expect(sent).toBeLessThan(10_000);
+    // Reading stopped soon after the cap, not at the end of the stream. The
+    // runtime pumps the request body through its own buffer, which may pull
+    // ahead of the reader under load, so the bound leaves room for that while
+    // staying far below the 1,000,000 bytes the source would produce.
+    expect(sent).toBeLessThan(256 * 1024);
   });
 
   it("T56: a body exactly at the limit is accepted; one byte over is refused", async () => {

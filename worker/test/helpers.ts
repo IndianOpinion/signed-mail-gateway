@@ -14,6 +14,7 @@ export interface Vector {
   nonce: string;
   signature: string;
   next_secret?: "A" | "B";
+  message?: Record<string, unknown>;
   clock_at?: number;
   expect: { status: number; error?: string; key_slot?: string; then?: { status: number; error?: string } };
 }

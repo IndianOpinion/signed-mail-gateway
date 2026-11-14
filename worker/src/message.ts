@@ -56,9 +56,18 @@ function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-/** Subject: CR and LF runs become one space; then trimmed. */
+/**
+ * Subject: CR and LF runs become one space, any other control character
+ * (except tab) becomes a space, then the result is trimmed.
+ */
 export function cleanSubject(raw: string): string {
-  return raw.replace(/[\r\n]+/g, " ").trim();
+  return (
+    raw
+      .replace(/[\r\n]+/g, " ")
+      // eslint-disable-next-line no-control-regex -- matching control characters is the point
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ")
+      .trim()
+  );
 }
 
 /**

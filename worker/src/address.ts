@@ -40,11 +40,13 @@ export function isValidEmail(email: string): boolean {
 }
 
 /**
- * Cleans a display name: CR, LF and tab become spaces, the result is trimmed
- * and cut to 100 characters. An empty result means no name.
+ * Cleans a display name: CR, LF, tab and every other control character
+ * become spaces, the result is trimmed and cut to 100 characters. An empty
+ * result means no name.
  */
 export function cleanName(raw: string): string | undefined {
-  const cleaned = Array.from(raw.replace(/[\r\n\t]/g, " ").trim())
+  // eslint-disable-next-line no-control-regex -- matching control characters is the point
+  const cleaned = Array.from(raw.replace(/[\x00-\x1f\x7f]/g, " ").trim())
     .slice(0, MAX_NAME_LENGTH)
     .join("")
     .trim();

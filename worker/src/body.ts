@@ -5,6 +5,8 @@
  * read. The stream is then read with a running byte count and cancelled as
  * soon as it passes the cap, so a missing or false length cannot get a larger
  * body through and the Worker never buffers more than cap plus one chunk.
+ * The chunks are then copied into one ArrayBuffer, returned as a byte view,
+ * which is what the signature is computed over.
  */
 
 export type BodyResult = { ok: true; bytes: Uint8Array } | { ok: false };

@@ -33,12 +33,18 @@ ENABLED_DOMAINS = "<mail.your-domain>"
 #   npx wrangler secret put GATEWAY_SECRET
 #   npx wrangler secret put GATEWAY_SECRET_NEXT   (only during a key change)
 
-# One binding per sender domain. allowed_sender_addresses lists the exact
-# From addresses. Cloudflare refuses any other address, so a leaked gateway
-# secret still cannot send as an address you did not list.
+# The send_email binding is account-level: it is not tied to one domain and
+# can send from any domain onboarded to Email Sending on the account. Which
+# From addresses may send is set by the account holder in the Cloudflare
+# dashboard, not here, so changing the list never needs a redeploy. SENDERS
+# maps each sender domain to this binding name; several domains may share it.
+#
+# Cloudflare also documents an optional per-binding allowlist in this file
+# (Email Service, "Send bindings", read 13 November 2026). It is a further
+# restriction, not a replacement for the dashboard setting:
+#   allowed_sender_addresses = ["<sender@your-domain>"]
 [[send_email]]
 name = "MAIL_SENDER"
-allowed_sender_addresses = ["<sender@your-domain>", "<another-sender@your-domain>"]
 
 [[durable_objects.bindings]]
 name = "NONCE_STORE"

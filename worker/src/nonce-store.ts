@@ -82,7 +82,7 @@ export class NonceStore extends DurableObject {
       await this.ctx.storage.setAlarm(Date.now() + 1000);
       return;
     }
-    if (this.count() > 0) {
+    if (this.hasKeys()) {
       await this.ctx.storage.setAlarm(Date.now() + windowSeconds * 1000);
     }
   }
@@ -105,8 +105,7 @@ export class NonceStore extends DurableObject {
     return row === undefined ? 600 : row.value;
   }
 
-  private count(): number {
-    const row = this.sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM nonces").toArray()[0];
-    return row === undefined ? 0 : row.n;
+  private hasKeys(): boolean {
+    return this.sql.exec("SELECT 1 FROM nonces LIMIT 1").toArray().length > 0;
   }
 }

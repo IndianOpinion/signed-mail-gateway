@@ -76,4 +76,29 @@ describe("test vectors (section 12.4)", () => {
       expect(h.binding.calls).toHaveLength(0);
     }
   });
+
+  it("V10 cross-half: the PHP-encoded body verifies and the binding gets the message the client meant", async () => {
+    const v = vector("V10");
+    expect(v.message).toBeDefined();
+    // The worker never re-encodes: the body string is the exact client output.
+    expect(JSON.parse(v.body)).toEqual(v.message);
+    expect(v.nonce).toHaveLength(64);
+    const h = harness();
+    const res = await h.fetch(await vectorRequest(v));
+    expect(res.status).toBe(200);
+    const m = v.message as { subject: string; html: string; text: string; headers: Record<string, string> };
+    expect(h.binding.calls[0]).toMatchObject({
+      from: { email: "accounts@mail.example.org", name: "Example Accounts" },
+      to: [{ email: "reader@example.com", name: "Reader One" }],
+      replyTo: "help@mail.example.org",
+      subject: m.subject,
+      html: m.html,
+      text: m.text,
+      headers: m.headers,
+    });
+    // One byte changed in the escaped subject breaks it.
+    const tampered = { ...v, body: v.body.replace("\\u0928", "\\u0929") };
+    expect(tampered.body).not.toBe(v.body);
+    expect((await harness().fetch(await vectorRequest(tampered))).status).toBe(401);
+  });
 });
