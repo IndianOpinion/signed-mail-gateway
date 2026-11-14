@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+/.github export-ignore
+/.editorconfig export-ignore
+/.gitattributes export-ignore
+/worker/test export-ignore
+/client/tests export-ignore
+/client/phpunit.xml.dist export-ignore
+/client/phpstan.neon.dist export-ignore
+/client/phpcs.xml.dist export-ignore
